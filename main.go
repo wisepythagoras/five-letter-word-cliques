@@ -37,44 +37,48 @@ func hasUniqueLetters(word1 uint32, word2 uint32) bool {
 	return word1&word2 == 0
 }
 
-func findFiveWords(wordMasks []uint32, word uint32, count uint8, result []uint32) ([]uint32, uint8) {
+func findFiveWords(wordMasks []uint32, word uint32, count uint8, tmp []uint32, res *[][]uint32, findAll bool) uint8 {
 	if count == 4 {
+		*res = append(*res, tmp)
+
 		// Found 5 words.
-		return result, count + 1
+		if findAll {
+			return count - 1
+		} else {
+			return count + 1
+		}
 	}
 
 	for _, mask := range wordMasks {
 		if hasUniqueLetters(mask, word) {
-			newResult, newCount := findFiveWords(wordMasks, word|mask, count+1, append(result, mask))
+			newCount := findFiveWords(wordMasks, word|mask, count+1, append(tmp, mask), res, findAll)
 
 			if newCount > count {
-				return newResult, count
+				return count
 			}
 		}
 	}
 
-	return result, count - 1
+	return count - 1
 }
 
-func childRoutine(words []uint32, id int, jobChan <-chan uint32, verbose bool) {
+func childRoutine(words []uint32, id int, jobChan <-chan uint32, findAll bool, verbose bool) {
 	defer wg.Done()
 
-	for uMask := range jobChan {
-		if uMask == 0 {
+	for word := range jobChan {
+		if word == 0 {
 			continue
 		}
 
-		foundMasks, _ := findFiveWords(words, uMask, 0, make([]uint32, 0))
+		results := make([][]uint32, 0)
+		findFiveWords(words, word, 0, []uint32{word}, &results, findAll)
 
 		// Request a new job.
 		reqChan <- id
 
-		if len(foundMasks) == 0 {
-			continue
+		for _, result := range results {
+			mainChan <- result
 		}
-
-		// Submit the findings, if there were any.
-		mainChan <- append([]uint32{uMask}, foundMasks...)
 	}
 
 	vPrintln(verbose, id, " Done")
@@ -92,6 +96,7 @@ func main() {
 	verbosePtr := flag.Bool("verbose", false, "Print out all messages")
 	wordFilePtr := flag.String("word-file", "", "The path to the word file")
 	outputListPtr := flag.Bool("output-list", false, "Outputs the list of words without repeating letters")
+	findAllPtr := flag.Bool("find-all", false, "Find all combinations (not just the first)")
 
 	flag.Parse()
 
@@ -177,7 +182,7 @@ func main() {
 
 	for i := 0; i < cores; i++ {
 		wg.Add(1)
-		go childRoutine(masks, i, jobChans[i], verbose)
+		go childRoutine(masks, i, jobChans[i], *findAllPtr, verbose)
 	}
 
 	go func() {
