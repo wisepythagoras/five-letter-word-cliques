@@ -91,6 +91,7 @@ func vPrintln(verbose bool, args ...any) {
 func main() {
 	verbosePtr := flag.Bool("verbose", false, "Print out all messages")
 	wordFilePtr := flag.String("word-file", "", "The path to the word file")
+	outputListPtr := flag.Bool("output-list", false, "Outputs the list of words without repeating letters")
 
 	flag.Parse()
 
@@ -106,7 +107,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	verbose := *verbosePtr
+	verbose := *verbosePtr || *outputListPtr
 	cores := runtime.NumCPU()
 	mainChan = make(chan []uint32)
 	reqChan = make(chan int)
@@ -131,6 +132,10 @@ func main() {
 				masks = append(masks, bits)
 			}
 		}
+	}
+
+	if *outputListPtr {
+		os.Exit(0)
 	}
 
 	for i := 0; i < cores; i++ {
